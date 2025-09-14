@@ -4,14 +4,24 @@
 #include "user/user.h"
 #include "kernel/fcntl.h"
 
+
+
 // Parsed command representation
 #define EXEC  1
 #define REDIR 2
 #define PIPE  3
 #define LIST  4
 #define BACK  5
-
 #define MAXARGS 10
+
+
+void add_to_history(char*);
+void show_history(void);
+char* get_history_cmd(int);
+#define MAXHIST 10
+char history[MAXHIST][100];
+int hist_count = 0;    
+int hist_start = 0;
 
 struct cmd {
   int type;
@@ -158,7 +168,40 @@ main(void)
 
   // Read and run input commands.
   while(getcmd(buf, sizeof(buf)) >= 0){
+
+    // History Implementation
+    // Handle history command with selection
+    if(buf[0] == 'h' && buf[1] == 'i' && buf[2] == 's' && buf[3] == 't') {
+        show_history();
+        
+        // Ask user to select a command
+        printf("Enter command number (1-%d) or 0 to cancel: ", 
+              (hist_count < MAXHIST) ? hist_count : MAXHIST);
+        
+        // Get user's choice
+        char choice_buf[10];
+        getcmd(choice_buf, sizeof(choice_buf));
+        
+        int choice = choice_buf[0] - '0';  // Convert character to number
+        
+        if(choice == 0) {
+            printf("Cancelled\n");
+            continue;
+        }
+        
+        char* selected_cmd = get_history_cmd(choice);
+        if(selected_cmd) {
+            printf("Executing: %s", selected_cmd);
+            strcpy(buf, selected_cmd);
+            // Don't add this to history since it's a repeat
+            // Continue to execute the command normally
+        } else {
+            continue;  // Invalid choice, go back to shell prompt
+        }
+    }
+
     char *cmd = buf;
+    add_to_history(cmd);
     while (*cmd == ' ' || *cmd == '\t')
       cmd++;
     if (*cmd == '\n') // is a blank command
@@ -496,4 +539,38 @@ nulterminate(struct cmd *cmd)
     break;
   }
   return cmd;
+}
+
+
+void add_to_history(char *cmd) {
+    // Store in circular buffer
+    int index = hist_count % MAXHIST;  // This gives us 0,1,2...9,0,1,2... for MAXHIST=10
+    strcpy(history[index], cmd);       // Copy command into history array
+    hist_count++;                      // Increment total count
+}
+
+void show_history() {
+    printf("Command History:\n");
+    
+    int commands_to_show = (hist_count < MAXHIST) ? hist_count : MAXHIST;
+    
+    for (int i = 0; i < commands_to_show; i++) {
+        int array_index = (hist_count - commands_to_show + i) % MAXHIST;
+        printf("%d: %s", i + 1, history[array_index]);
+    }
+}
+
+char* get_history_cmd(int n) {
+    // Step 1: Check if n is valid
+    int commands_available = (hist_count < MAXHIST) ? hist_count : MAXHIST;
+    if (n < 1 || n > commands_available) {
+        printf("Invalid history number\n");
+        return 0;
+    }
+    
+    // Step 2: Find array index for command number n
+    int array_index = (hist_count - commands_available + n - 1) % MAXHIST;
+
+    // Step 3: Return pointer to the command
+    return history[array_index];
 }
