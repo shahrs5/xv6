@@ -15,9 +15,7 @@
 #define MAXARGS 10
 
 
-void add_to_history(char*);
-void show_history(void);
-char* get_history_cmd(int);
+
 #define MAXHIST 10
 char history[MAXHIST][100];
 int hist_count = 0;    
@@ -171,7 +169,7 @@ main(void)
 
     // History Implementation
     // Handle history command with selection
-    if(buf[0] == 'h' && buf[1] == 'i' && buf[2] == 's' && buf[3] == 't') {
+    if(buf[0] == 'h' && buf[1] == 'i' && buf[2] == 's' && buf[3] == 't' && buf[4] == 'o' && buf[5] == 'r' && buf[6] == 'y') {
         show_history();
         
         // Ask user to select a command
