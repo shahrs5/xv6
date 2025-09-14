@@ -14,7 +14,9 @@
 #define BACK  5
 #define MAXARGS 10
 
-
+void add_to_history(char*);
+void show_history(void);
+char* get_history_cmd(int);
 
 #define MAXHIST 10
 char history[MAXHIST][100];
