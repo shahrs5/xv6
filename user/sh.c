@@ -33,6 +33,7 @@ struct execcmd {
   char *eargv[MAXARGS];
 };
 
+
 struct redircmd {
   int type;
   struct cmd *cmd;
