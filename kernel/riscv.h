@@ -31,6 +31,7 @@ w_mstatus(uint64 x)
   asm volatile("csrw mstatus, %0" : : "r" (x));
 }
 
+
 // machine exception program counter, holds the
 // instruction address to which a return from
 // exception will go.
@@ -280,8 +281,24 @@ static inline uint64
 r_time()
 {
   uint64 x;
-  asm volatile("csrr %0, time" : "=r" (x) );
+  asm volatile("rdtime %0" : "=r" (x) );
   return x;
+}
+
+static inline uint64
+r_cycle()
+{
+  uint64 cycle;
+  asm volatile("rdcycle %0" : "=r" (cycle) );
+  return cycle;
+}
+
+static inline uint64
+r_instret()
+{
+  uint64 instret;
+  asm volatile("rdinstret %0" : "=r" (instret) );
+  return instret;
 }
 
 // enable device interrupts
@@ -345,6 +362,22 @@ r_ra()
   asm volatile("mv %0, ra" : "=r" (x) );
   return x;
 }
+
+// Read/write scounteren (Supervisor Counter Enable)
+static inline uint64
+r_scounteren()
+{
+  uint64 x;
+  asm volatile("csrr %0, scounteren" : "=r" (x));
+  return x;
+}
+
+static inline void
+w_scounteren(uint64 x)
+{
+  asm volatile("csrw scounteren, %0" : : "r" (x));
+}
+
 
 // flush the TLB.
 static inline void

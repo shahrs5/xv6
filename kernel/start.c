@@ -24,6 +24,10 @@ start()
   // requires gcc -mcmodel=medany
   w_mepc((uint64)main);
 
+  
+  // Enable user-mode access to cycle, time, and instret counters
+  w_scounteren(0x7);  // bits 0, 1, 2 = cycle, time, instret
+
   // disable paging for now.
   w_satp(0);
 
@@ -31,6 +35,7 @@ start()
   w_medeleg(0xffff);
   w_mideleg(0xffff);
   w_sie(r_sie() | SIE_SEIE | SIE_STIE | SIE_SSIE);
+  w_mcounteren(0x7);
 
   // configure Physical Memory Protection to give supervisor mode
   // access to all of physical memory.

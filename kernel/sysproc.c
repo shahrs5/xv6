@@ -123,3 +123,24 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+uint64 sys_getcycles(void) {
+//   uint64 cycles;
+//   asm volatile("rdcycle %0" : "=r" (cycles));
+  // return cycles;
+  return r_cycle();
+} 
+
+uint64 sys_gettime(void) {
+  // uint64 time;
+  // asm volatile("rdtime %0" : "=r" (time));
+  // return time;
+  return r_time();
+} 
+
+uint64 sys_getinstret(void) {
+  // uint64 instret;
+  // asm volatile("rdinstret %0" : "=r" (instret));
+  // return instret;
+  return r_instret();
+} 

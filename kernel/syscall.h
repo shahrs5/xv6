@@ -35,3 +35,9 @@
 #define SYS_recv      32
 #define SYS_pgpte     33
 #define SYS_kpgtbl    34
+
+// System calls for CPU Time cpu cycles, time and instructions retired.
+#define SYS_getcycles 35
+#define SYS_gettime 36
+#define SYS_getinstret 37
+
