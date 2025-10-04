@@ -29,6 +29,7 @@ int uptime(void);
 int getcycles(void);
 int gettime(void);
 int getinstret(void);
+int gettotalmem(void);
 
 #ifdef LAB_NET
 int bind(uint32);

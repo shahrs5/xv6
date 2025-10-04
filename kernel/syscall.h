@@ -40,4 +40,5 @@
 #define SYS_getcycles 35
 #define SYS_gettime 36
 #define SYS_getinstret 37
+#define SYS_gettotalmem 38
 

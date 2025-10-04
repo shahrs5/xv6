@@ -45,3 +45,4 @@ entry("kpgtbl");
 entry("getcycles");
 entry("gettime");
 entry("getinstret");
+entry("gettotalmem");

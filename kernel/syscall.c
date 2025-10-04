@@ -104,6 +104,7 @@ extern uint64 sys_close(void);
 extern uint64 sys_getcycles(void);
 extern uint64 sys_gettime(void);
 extern uint64 sys_getinstret(void);
+extern uint64 sys_gettotalmem(void);
 
 
 #ifdef LAB_NET
@@ -144,6 +145,7 @@ static uint64 (*syscalls[])(void) = {
 [SYS_getcycles] sys_getcycles,
 [SYS_gettime] sys_gettime,
 [SYS_getinstret] sys_getinstret,
+[SYS_gettotalmem]  sys_gettotalmem,
 
 #ifdef LAB_NET
 [SYS_bind] sys_bind,

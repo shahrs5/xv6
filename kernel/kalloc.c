@@ -12,7 +12,6 @@
 void freerange(void *pa_start, void *pa_end);
 
 extern char end[]; // first address after kernel.
-                   // defined by kernel.ld.
 
 struct run {
   struct run *next;
@@ -79,4 +78,16 @@ kalloc(void)
   if(r)
     memset((char*)r, 5, PGSIZE); // fill with junk
   return (void*)r;
+}
+
+
+
+
+uint64
+get_total_memory(void)
+{
+  // PHYSTOP is the physical address where RAM ends
+  // RAM starts at 0x80000000 on RISC-V
+  // So actual RAM size = PHYSTOP - 0x80000000
+  return (uint64)PHYSTOP - 0x80000000;
 }

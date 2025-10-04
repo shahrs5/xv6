@@ -144,3 +144,9 @@ uint64 sys_getinstret(void) {
   // return instret;
   return r_instret();
 } 
+
+uint64
+sys_gettotalmem(void)
+{
+  return get_total_memory();
+}
