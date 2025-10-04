@@ -196,6 +196,8 @@ UPROGS=\
 	$U/_zombie\
 	$U/_performance\
 	$U/_memtest\
+	$U/_matrix\
+
 
 
 
