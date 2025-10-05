@@ -192,28 +192,38 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
 {
   uint64 a;
   pte_t *pte;
+  pte_t *level1_pte;
 
   if((va % PGSIZE) != 0)
     panic("uvmunmap: not aligned");
 
   for(a = va; a < va + npages*PGSIZE; a += PGSIZE){
+    // Check if this address is part of a superpage
+    // Check level-1 PTE first
+    pte_t *level2_pte = &pagetable[PX(2, a)];
+    // Level-2 PTE must be valid and NOT a leaf (no R/W/X bits) to point to level-1
+    if((*level2_pte & PTE_V) && !((*level2_pte) & (PTE_R | PTE_W | PTE_X))) {
+      pagetable_t level1_pt = (pagetable_t)PTE2PA(*level2_pte);
+      level1_pte = &level1_pt[PX(1, a)];
+
+      // If level-1 PTE is a leaf (superpage), handle it
+      if((*level1_pte & PTE_V) && (*level1_pte & (PTE_R | PTE_W | PTE_X))) {
+        // This is a superpage
+        if(do_free) {
+          uint64 pa = PTE2PA(*level1_pte);
+          superfree((void*)pa);
+        }
+        *level1_pte = 0;
+        a += SUPERPGSIZE - PGSIZE;  // Skip ahead, loop adds PGSIZE
+        continue;
+      }
+    }
+
+    // Normal page handling
     if((pte = walk(pagetable, a, 0)) == 0)
       panic("uvmunmap: walk");
     if((*pte & PTE_V) == 0)
       panic("uvmunmap: not mapped");
-    
-    // Check if this is a superpage
-    if(is_superpage_pte(*pte)) {
-      if(do_free) {
-        uint64 pa = PTE2PA(*pte);
-        superfree((void*)pa);
-      }
-      *pte = 0;
-      a += SUPERPGSIZE - PGSIZE;  // Skip ahead, loop adds PGSIZE
-      continue;
-    }
-    
-    // Normal page handling
     if(PTE_FLAGS(*pte) == PTE_V)
       panic("uvmunmap: not a leaf");
     if(do_free){
@@ -344,25 +354,49 @@ int
 uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
 {
   pte_t *pte;
+  pte_t *level1_pte;
   uint64 pa, i;
   uint flags;
   char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
+    // Check if this address is part of a superpage
+    pte_t *level2_pte = &old[PX(2, i)];
+    // Level-2 PTE must be valid and NOT a leaf (no R/W/X bits) to point to level-1
+    if((*level2_pte & PTE_V) && !((*level2_pte) & (PTE_R | PTE_W | PTE_X))) {
+      pagetable_t level1_pt = (pagetable_t)PTE2PA(*level2_pte);
+      level1_pte = &level1_pt[PX(1, i)];
+
+      // If level-1 PTE is a leaf (superpage), handle it
+      if((*level1_pte & PTE_V) && (*level1_pte & (PTE_R | PTE_W | PTE_X))) {
+        // This is a superpage - copy it
+        pa = PTE2PA(*level1_pte);
+        flags = PTE_FLAGS(*level1_pte);
+
+        // Allocate new superpage
+        if((mem = superalloc()) == 0)
+          goto err;
+
+        // Copy contents
+        memmove(mem, (void*)pa, SUPERPGSIZE);
+
+        // Map in new page table
+        if(mappages_super(new, i, SUPERPGSIZE, (uint64)mem, flags) != 0) {
+          superfree(mem);
+          goto err;
+        }
+
+        i += SUPERPGSIZE - PGSIZE;  // Skip ahead, loop adds PGSIZE
+        continue;
+      }
+    }
+
+    // Normal page handling
     if((pte = walk(old, i, 0)) == 0)
       panic("uvmcopy: pte should exist");
     if((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
-    
-    // Check if this is a superpage
-    if(is_superpage_pte(*pte)) {
-      if(uvmcopy_super(old, new, i) < 0)
-        goto err;
-      i += SUPERPGSIZE - PGSIZE;  // Skip ahead, loop adds PGSIZE
-      continue;
-    }
-    
-    // Normal page handling
+
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
     if((mem = kalloc()) == 0)
@@ -517,109 +551,44 @@ pgpte(pagetable_t pagetable, uint64 va) {
 
 
 // Map a superpage (2MB) in the page table
+// For RISC-V superpages, we need to set a level-1 PTE as a leaf
 int
 mappages_super(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
 {
-  uint64 a, last;
   pte_t *pte;
+  pagetable_t level1_pt;
 
   if(size != SUPERPGSIZE)
     panic("mappages_super: size not 2MB");
-  
+
   if(!IS_SUPERALIGNED(va) || !IS_SUPERALIGNED(pa))
     panic("mappages_super: not aligned");
 
-  a = va;
-  last = va + size - 1;
-  
-  for(;;) {
-    if((pte = walk(pagetable, a, 1)) == 0)
+  // Navigate to level-2 PTE
+  pte = &pagetable[PX(2, va)];
+
+  // If level-2 PTE doesn't point to a level-1 page table, allocate one
+  if(*pte & PTE_V) {
+    level1_pt = (pagetable_t)PTE2PA(*pte);
+  } else {
+    level1_pt = (pagetable_t)kalloc();
+    if(level1_pt == 0)
       return -1;
-    
-    if(*pte & PTE_V)
-      panic("mappages_super: remap");
-    
-    *pte = PA2PTE(pa) | perm | PTE_V | PTE_R;
-    
-    if(a == last)
-      break;
-    a += SUPERPGSIZE;
-    pa += SUPERPGSIZE;
+    memset(level1_pt, 0, PGSIZE);
+    *pte = PA2PTE(level1_pt) | PTE_V;
   }
-  
+
+  // Now set the level-1 PTE as a leaf (superpage)
+  pte = &level1_pt[PX(1, va)];
+
+  if(*pte & PTE_V)
+    panic("mappages_super: remap");
+
+  // Set the level-1 PTE with the physical address and permissions
+  // The R bit makes this a leaf PTE (superpage)
+  *pte = PA2PTE(pa) | perm | PTE_V;
+
   return 0;
 }
 
-// Check if a PTE is a superpage
-int
-is_superpage_pte(pte_t pte)
-{
-  return (pte & PTE_V) && (pte & (PTE_R | PTE_W | PTE_X));
-}
-
-
-// Unmap superpages
-void
-uvmunmap_super(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
-{
-  uint64 a;
-  pte_t *pte;
-
-  if(!IS_SUPERALIGNED(va))
-    panic("uvmunmap_super: not aligned");
-
-  for(a = va; a < va + npages * SUPERPGSIZE; a += SUPERPGSIZE) {
-    if((pte = walk(pagetable, a, 0)) == 0)
-      panic("uvmunmap_super: walk");
-    
-    if((*pte & PTE_V) == 0)
-      panic("uvmunmap_super: not mapped");
-    
-    if(!is_superpage_pte(*pte))
-      panic("uvmunmap_super: not a superpage");
-    
-    if(do_free) {
-      uint64 pa = PTE2PA(*pte);
-      superfree((void*)pa);
-    }
-    
-    *pte = 0;
-  }
-}
-
-// Copy superpages during fork
-int
-uvmcopy_super(pagetable_t old, pagetable_t new, uint64 va)
-{
-  pte_t *pte;
-  uint64 pa;
-  void *mem;
-
-  if((pte = walk(old, va, 0)) == 0)
-    panic("uvmcopy_super: pte should exist");
-  
-  if((*pte & PTE_V) == 0)
-    panic("uvmcopy_super: page not present");
-  
-  if(!is_superpage_pte(*pte))
-    panic("uvmcopy_super: not a superpage");
-
-  pa = PTE2PA(*pte);
-  
-  // Allocate new superpage
-  if((mem = superalloc()) == 0)
-    return -1;
-  
-  // Copy contents
-  memmove(mem, (void*)pa, SUPERPGSIZE);
-  
-  // Map in new page table
-  if(mappages_super(new, va, SUPERPGSIZE, (uint64)mem, 
-                    PTE_FLAGS(*pte)) != 0) {
-    superfree(mem);
-    return -1;
-  }
-  
-  return 0;
-}
 

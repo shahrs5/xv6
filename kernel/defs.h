@@ -187,9 +187,6 @@ int             copyout(pagetable_t, uint64, char *, uint64);
 int             copyin(pagetable_t, char *, uint64, uint64);
 int             copyinstr(pagetable_t, char *, uint64, uint64);
 int             mappages_super(pagetable_t, uint64, uint64, uint64, int);
-void            uvmunmap_super(pagetable_t, uint64, uint64, int);
-int             uvmcopy_super(pagetable_t, pagetable_t, uint64);
-int             is_superpage_pte(pte_t);
 #if defined(LAB_PGTBL) || defined(SOL_MMAP)
 void            vmprint(pagetable_t);
 #endif

@@ -92,18 +92,25 @@ void
 superfree(void *pa)
 {
   if((uint64)pa % SUPERPAGE_SIZE != 0)
-    // panic("superfree: not aligned");
-  
+    panic("superfree: not aligned");
+
   acquire(&superpage_mem.lock);
-  
+
+  int found = 0;
   for(int i = 0; i < NUM_SUPERPAGES; i++) {
     if(superpage_mem.pages[i] == pa) {
+      if(superpage_mem.available[i])
+        panic("superfree: already free");
       superpage_mem.available[i] = 1;
+      found = 1;
       break;
     }
   }
-  
+
   release(&superpage_mem.lock);
+
+  if(!found)
+    panic("superfree: not a superpage");
 }
 
 // Check if address is a superpage
