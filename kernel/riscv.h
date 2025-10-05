@@ -392,6 +392,8 @@ typedef uint64 *pagetable_t; // 512 PTEs
 
 #endif // __ASSEMBLER__
 
+
+// Superpage Definitions
 #define PGSIZE 4096 // bytes per page
 #define PGSHIFT 12  // bits of offset within a page
 
@@ -402,6 +404,10 @@ typedef uint64 *pagetable_t; // 512 PTEs
 
 #define PGROUNDUP(sz)  (((sz)+PGSIZE-1) & ~(PGSIZE-1))
 #define PGROUNDDOWN(a) (((a)) & ~(PGSIZE-1))
+
+// Add these if they're not there:
+#define SUPERPGROUNDDOWN(a) (((a)) & ~(SUPERPGSIZE - 1))
+#define IS_SUPERALIGNED(a) (((uint64)(a) % SUPERPGSIZE) == 0)
 
 #define PTE_V (1L << 0) // valid
 #define PTE_R (1L << 1)
@@ -432,3 +438,4 @@ typedef uint64 *pagetable_t; // 512 PTEs
 // Sv39, to avoid having to sign-extend virtual addresses
 // that have the high bit set.
 #define MAXVA (1L << (9 + 9 + 9 + 12 - 1))
+

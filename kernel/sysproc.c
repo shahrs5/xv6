@@ -35,18 +35,73 @@ sys_wait(void)
   return wait(p);
 }
 
+// Modify sys_sbrk in kernel/sysproc.c
+
 uint64
 sys_sbrk(void)
 {
   uint64 addr;
   int n;
+  struct proc *p = myproc();
 
-  argint(0, &n);
-  addr = myproc()->sz;
+  argint(0, &n);  // Remove the if() check
+  
+  addr = p->sz;
+  
+  // Check if we should use superpages
+  if(n >= SUPERPGSIZE) {
+    // Calculate how much can be allocated with superpages
+    uint64 start = addr;
+    uint64 end = addr + n;
+    
+    // Find 2MB-aligned region within the range
+    uint64 super_start = SUPERPGROUNDUP(start);
+    uint64 super_end = SUPERPGROUNDDOWN(end);
+    
+    if(super_start < super_end) {
+      // We have at least one superpage to allocate
+      
+      // 1. Allocate normal pages before the superpage region
+      if(super_start > start) {
+        if(growproc(super_start - start) < 0)
+          return -1;
+      }
+      
+      // 2. Allocate superpages
+      uint64 num_superpages = (super_end - super_start) / SUPERPGSIZE;
+      for(uint64 i = 0; i < num_superpages; i++) {
+        void *mem = superalloc();
+        if(mem == 0) {
+          return -1;
+        }
+        
+        uint64 va = super_start + i * SUPERPGSIZE;
+        if(mappages_super(p->pagetable, va, SUPERPGSIZE, (uint64)mem,
+                         PTE_W | PTE_X | PTE_R | PTE_U) < 0) {
+          superfree(mem);
+          return -1;
+        }
+      }
+      
+      p->sz = super_end;
+      
+      // 3. Allocate normal pages after the superpage region
+      if(end > super_end) {
+        if(growproc(end - super_end) < 0)
+          return -1;
+      }
+      
+      return addr;
+    }
+  }
+  
+  // Normal allocation (no superpages)
   if(growproc(n) < 0)
     return -1;
+  
   return addr;
 }
+
 
 uint64
 sys_sleep(void)

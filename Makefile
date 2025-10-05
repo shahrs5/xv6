@@ -197,6 +197,7 @@ UPROGS=\
 	$U/_performance\
 	$U/_memtest\
 	$U/_matrix\
+	$U/_supertest\
 
 
 

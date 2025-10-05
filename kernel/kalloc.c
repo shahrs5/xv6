@@ -9,6 +9,120 @@
 #include "riscv.h"
 #include "defs.h"
 
+#define SUPERPAGE_SIZE (2 * 1024 * 1024)  // 2MB
+#define NUM_SUPERPAGES 8  // Reserve 8 superpages (16MB total)
+extern char end[]; // first address after kernel (from kernel.ld)
+
+struct {
+  struct spinlock lock;
+  void *pages[NUM_SUPERPAGES];
+  int available[NUM_SUPERPAGES];
+} superpage_mem;
+
+// Initialize superpages during kinit
+void
+superpage_init(void)
+{
+  initlock(&superpage_mem.lock, "superpage");
+  
+  // Start after kernel
+  char *p = (char*)PGROUNDUP((uint64)end);
+  
+  // Calculate how much space we need to reserve
+  uint64 total_super_mem = NUM_SUPERPAGES * SUPERPAGE_SIZE;
+  
+  // Make sure we don't go past PHYSTOP
+  if((uint64)p + total_super_mem > PHYSTOP) {
+    panic("superpage_init: not enough memory for superpages");
+  }
+  
+  for(int i = 0; i < NUM_SUPERPAGES; i++) {
+    // Align to 2MB boundary
+    uint64 addr = (uint64)p;
+    if(addr % SUPERPAGE_SIZE != 0) {
+      addr = ((addr / SUPERPAGE_SIZE) + 1) * SUPERPAGE_SIZE;
+    }
+    
+    // Check if this superpage would exceed physical memory
+    if(addr + SUPERPAGE_SIZE > PHYSTOP) {
+      printf("superpage_init: only allocated %d superpages (not enough memory)\n", i);
+      // Mark remaining as unavailable
+      for(int j = i; j < NUM_SUPERPAGES; j++) {
+        superpage_mem.pages[j] = 0;
+        superpage_mem.available[j] = 0;
+      }
+      return;
+    }
+    
+    superpage_mem.pages[i] = (void*)addr;
+    superpage_mem.available[i] = 1;
+    
+    printf("superpage_init: superpage[%d] = %p\n", i, (void*)addr);  // DEBUG
+    
+    p = (char*)(addr + SUPERPAGE_SIZE);
+  }
+}
+
+// Allocate a 2MB superpage
+void*
+superalloc(void)
+{
+  void *page = 0;
+  
+  acquire(&superpage_mem.lock);
+  
+  for(int i = 0; i < NUM_SUPERPAGES; i++) {
+    if(superpage_mem.available[i]) {
+      page = superpage_mem.pages[i];
+      superpage_mem.available[i] = 0;
+      
+      // Zero out the superpage
+      memset(page, 0, SUPERPAGE_SIZE);
+      break;
+    }
+  }
+  
+  release(&superpage_mem.lock);
+  
+  return page;
+}
+
+// Free a 2MB superpage
+void
+superfree(void *pa)
+{
+  if((uint64)pa % SUPERPAGE_SIZE != 0)
+    // panic("superfree: not aligned");
+  
+  acquire(&superpage_mem.lock);
+  
+  for(int i = 0; i < NUM_SUPERPAGES; i++) {
+    if(superpage_mem.pages[i] == pa) {
+      superpage_mem.available[i] = 1;
+      break;
+    }
+  }
+  
+  release(&superpage_mem.lock);
+}
+
+// Check if address is a superpage
+int
+is_superpage(void *pa)
+{
+  acquire(&superpage_mem.lock);
+  
+  for(int i = 0; i < NUM_SUPERPAGES; i++) {
+    if(superpage_mem.pages[i] == pa) {
+      release(&superpage_mem.lock);
+      return 1;
+    }
+  }
+  
+  release(&superpage_mem.lock);
+  return 0;
+}
+
 void freerange(void *pa_start, void *pa_end);
 
 extern char end[]; // first address after kernel.
@@ -26,9 +140,17 @@ void
 kinit()
 {
   initlock(&kmem.lock, "kmem");
-  freerange(end, (void*)PHYSTOP);
+  
+  superpage_init();  // Initialize superpages first
+  
+  // Superpages are from pages[0] to pages[NUM_SUPERPAGES-1]
+  // Free memory starts after the last superpage
+  void *free_start = (char*)superpage_mem.pages[NUM_SUPERPAGES - 1] + SUPERPAGE_SIZE;
+  
+  printf("kinit: freeing memory from %p to %p\n", free_start, (void*)PHYSTOP);
+  
+  freerange(free_start, (void*)PHYSTOP);
 }
-
 void
 freerange(void *pa_start, void *pa_end)
 {
